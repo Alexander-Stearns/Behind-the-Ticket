@@ -1,0 +1,100 @@
+// Measure: Settlements[Expected Cash]
+Expected Cash =
+SUM(Settlements[ExpectedSettlement])
+
+// Measure: Settlements[Received Cash]
+Received Cash =
+SUM(Settlements[ReceivedCash])
+
+// Measure: Settlements[Outstanding Cash]
+Outstanding Cash =
+[Expected Cash] - [Received Cash]
+
+// Measure: Settlements[Overdue Cash]
+Overdue Cash =
+IF(
+    COUNTROWS(Settlements) > 0,
+    CALCULATE(
+        [Outstanding Cash],
+        KEEPFILTERS(Settlements[DaysOverdue] > 0)
+    ) + 0,
+    BLANK()
+)
+
+// Measure: Settlements[Reference Exceptions]
+Reference Exceptions =
+SUM(Settlements[ReferenceMismatchCount])
+
+// Measure: Settlements[Cash Received %]
+Cash Received % =
+DIVIDE([Received Cash], [Expected Cash])
+
+// Measure: Settlements[Settlement Count]
+Settlement Count =
+COUNTROWS(Settlements)
+
+// Measure: Settlements[Investigation Event]
+Investigation Event =
+SELECTEDVALUE(
+    Events[EventName],
+    "Select an event from Settlement Overview"
+)
+
+// Measure: Settlements[Selected Next Action]
+Selected Next Action =
+IF(
+    HASONEVALUE(Settlements[SettlementID]),
+    "Next action • "
+        & SELECTEDVALUE(Settlements[SettlementID])
+        & ": "
+        & SELECTEDVALUE(Settlements[Next Action]),
+    "Select a settlement above to see its next action"
+)
+
+// Measure: Settlements[Cash Bridge Amount]
+Cash Bridge Amount =
+SWITCH(
+    SELECTEDVALUE('Cash Bridge Steps'[Step]),
+    "Gross sales", SUM(Settlements[GrossSales]),
+    "Refunds", -SUM(Settlements[Refunds]),
+    "Processing fees", -SUM(Settlements[ProcessingFees]),
+    BLANK()
+)
+
+// Calculated column: Settlements[Next Action]
+Next Action =
+SWITCH(
+    Settlements[SettlementStatus],
+    "Reference mismatch", "Verify remittance and correct bank reference",
+    "Overdue", "Contact sales channel for remaining payment",
+    "Processing", "Monitor payment against due date",
+    "Reconciled", "No action required",
+    "Review settlement"
+)
+
+// Measure: BankDeposits[Bank Reference Color]
+Bank Reference Color =
+VAR ActualRef =
+    SELECTEDVALUE(BankDeposits[BankReference])
+VAR ExpectedRef =
+    SELECTEDVALUE(Settlements[ExpectedBankReference])
+RETURN
+    IF(
+        NOT ISBLANK(ActualRef)
+            && NOT ISBLANK(ExpectedRef)
+            && ActualRef <> ExpectedRef,
+        "#E5DDF2",
+        "#FFFFFF"
+    )
+
+// Calculated table
+Cash Bridge Steps =
+DATATABLE(
+    "Step", STRING,
+    "Sort Order", INTEGER,
+    {
+        { "Gross sales", 1 },
+        { "Refunds", 2 },
+        { "Processing fees", 3 }
+    }
+)
